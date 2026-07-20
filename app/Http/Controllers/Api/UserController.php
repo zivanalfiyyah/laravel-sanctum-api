@@ -4,8 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
-use Illuminate\Http\Request;
+use App\Http\Requests\UpdateUserRequest;
+use App\Http\Requests\StoreUserRequest;
 use App\Http\Resources\UserResource;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 
 class UserController extends Controller
 {
@@ -18,20 +21,13 @@ class UserController extends Controller
             $query->where('name', 'like', '%' . $request->search . '%')
                 ->orWhere('email', 'like', '%' . $request->search . '%');
         }
-
-        $users = $query->paginate(10);
         
-        return UserResource::collection($users);
+        return UserResource::collection($query->paginate(10));
     }
 
-    public function store(Request $request)
+    public function store(StoreUserRequest $request)
     {
-        $validated = $request->validate([
-            'name'     => 'required|string|max:255',
-            'email'    => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:8',
-        ]);
-
+        $validated = $request->validated();
         $validated['password'] = bcrypt($validated['password']);
 
         $user = User::create($validated);
@@ -39,69 +35,45 @@ class UserController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'User berhasil dibuat',
-            'data'    => $user
+            'data'    => new UserResource($user)
         ], 201); 
     }
 
-    public function show($id)
+    public function show(User $user)
     {
-        $user = User::find($id);
-
-        if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'User tidak ditemukan'
-            ], 404);
-        }
-
         return response()->json([
             'success' => true,
             'message' => 'Detail data user',
-            'data'    => $user
+            'data'    => new UserResource($user)
         ], 200);
     }
 
-    public function update(Request $request, $id)
+    public function update(UpdateUserRequest $request, User $user)
     {
-        $user = User::find($id);
+        $data = $request->validated();
 
-        if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'User tidak ditemukan'
-            ], 404);
+        if (isset($data['password'])) {
+            $data['password'] = Hash::make($data['password']);
         }
 
-        $validated = $request->validate([
-            'name'  => 'sometimes|required|string|max:255',
-            'email' => 'sometimes|required|string|email|max:255|unique:users,email,' . $id,
-        ]);
-
-        $user->update($validated);
+        $user->update($data);
 
         return response()->json([
             'success' => true,
-            'message' => 'User berhasil diperbarui',
-            'data'    => $user
+            'message' => 'Profile berhasil diperbarui',
+            'data'    => new UserResource($user)
         ], 200);
     }
 
-    public function destroy($id)
+    public function destroy(User $user)
     {
-        $user = User::find($id);
 
-        if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'User tidak ditemukan'
-            ], 404);
-        }
-
+        $user->tokens()->delete();
         $user->delete();
 
         return response()->json([
             'success' => true,
-            'message' => 'User berhasil dihapus'
+            'message' => 'Akun berhasil dihapus'
         ], 200);
     }
 }
